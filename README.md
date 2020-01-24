@@ -1,6 +1,7 @@
 NLZM is a general-purpose file compressor that implements semi-optimal parsing LZ with a sliding window, exhaustive dictionaries up to 1 GB, cyclical + o0 + o1 context modelling, and a context-based statistical model for branch decisions.
 
 Results (c to compress, cf to compress fast, d to decompress, t to test in-memory decompression and CRC32):
+```
 nlzm -window:27 c enwik8.txt out8
 100000000 -> 25116875 in 102.080 sec
 
@@ -21,6 +22,7 @@ nlzm -window:27 cf enwik8.txt out8f
 
 nlzm -window:30 cf enwik9 out9f
 1000000000 -> 293022504 in 89.565 sec
+```
 
 Semi-optimal parsing is done by finding all matches (exhaustively) for the block size, then finding (but not updating search) matches for block size + nice length, then traced by finding the minimum cost from block size + nice length to block start. Not terminating matches at block size allows some (better) parsing decisions when matches could cross block boundaries. Block start is always aligned to block size so that the match finder is updated with every position. When a decision table is calculated for a block, the current costs of encoding (literal cost, match cost, etc) are estimated (log2[prob] bps, ~1-3% error compared to final compressed file size with 8k blocks) and used for path finding.
 
