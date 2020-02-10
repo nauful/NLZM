@@ -1,7 +1,9 @@
 NLZM is a general-purpose file compressor that implements mostly-optimal parsing LZ with a sliding window, exhaustive dictionaries up to 1 GB, long-range match finding, cyclical + o0 + o1 context modelling, and a context-based statistical model for decision coding.
 
 Results
+
 enwik8.txt to 25,226,391 bytes and decompresses in 0.95 seconds.
+
 enwik9.txt to 203,649,613 bytes and decompresses in 8.64 seconds.
 
 1.02 update:
