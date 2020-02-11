@@ -564,6 +564,9 @@ struct BitCoder {
 const static int MATCH_MIN_BASE = 2;
 const static int MATCH_LIMIT = MATCH_MIN_BASE + (1 << 12);
 
+const static int NICE_MATCH = 128;
+const static int NICE_MATCH_UNTIL = 16;
+
 INLINE uint32 get_match_min(uint32 dist) {
 	uint32 match_min = 2;
 	if (dist & ~0xFF) { ++match_min; }
@@ -2027,7 +2030,7 @@ struct RK256 : public MatchFinder_Base {
 
 	RK256() : RK256(0, 0) {}
 
-	uint32 MinLength() const override { return BLOCK_SIZE; }
+	uint32 MinLength() const override { return NICE_MATCH_UNTIL; }
 
 	void Init() {
 		cache = new uint16[1 << hash_bits];
@@ -2095,6 +2098,7 @@ struct RK256 : public MatchFinder_Base {
 	}
 
 	uint32* FindAndUpdate(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) override {
+		int best_len = MinLength() - 1;
 		int num_results = 0;
 		match_results[0] = -1;
 
@@ -2122,7 +2126,7 @@ struct RK256 : public MatchFinder_Base {
 				if (p > sp
 					&& p - sp < max_dist) {
 					int len = try_match(buf, sp, mp, p_end);
-					if (len) {
+					if (len > best_len) {
 						match_results[num_results++] = len;
 						match_results[num_results++] = sp;
 					}
@@ -2134,7 +2138,7 @@ struct RK256 : public MatchFinder_Base {
 				hist_end = rh_end;
 			}
 
-			if (num_results) {
+			if (num_results == MATCH_MAX_RESULT_ROWS) {
 				break;
 			}
 		}
@@ -2160,8 +2164,6 @@ struct MatchNode {
 struct MatcherOpt {
 	const static int INCOMPRESSIBLE_STEP = 16;
 	const static int INCOMPRESSIBLE_MAX_STEP_BITS = 6;
-	const static int NICE_MATCH = 128;
-	const static int NICE_MATCH_UNTIL = 16;
 
 	HR2 mf2;
 	HR3 mf3;
@@ -2567,7 +2569,7 @@ void opt_parse_path_matches(const byte* window, ParsePath* path, const MatchNode
 				cn->dict_match_pos = match_pos;
 			}
 
-			if (test_len >= MatcherOpt::NICE_MATCH) {
+			if (test_len >= NICE_MATCH) {
 				break;
 			}
 
