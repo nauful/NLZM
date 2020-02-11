@@ -2071,7 +2071,7 @@ struct RK256 : public MatchFinder_Base {
 			++rh_end;
 
 			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
 				table[rh >> (32 - hash_bits)] = rh_end;
 			}
 		}
@@ -2081,7 +2081,7 @@ struct RK256 : public MatchFinder_Base {
 			++rh_end;
 
 			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
 				table[rh >> (32 - hash_bits)] = rh_end;
 			}
 		}
@@ -2091,7 +2091,7 @@ struct RK256 : public MatchFinder_Base {
 			++rh_end;
 
 			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
 				table[rh >> (32 - hash_bits)] = rh_end;
 			}
 		}
@@ -2108,7 +2108,7 @@ struct RK256 : public MatchFinder_Base {
 			++rh_end;
 
 			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
 				table[rh >> (32 - hash_bits)] = rh_end;
 			}
 		}
@@ -2117,9 +2117,13 @@ struct RK256 : public MatchFinder_Base {
 			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
 			++rh_end;
 
+			if (num_results) {
+				continue;
+			}
+
 			uint16& cache_end = cache[rh >> (32 - hash_bits)];
 			uint32& hist_end = table[rh >> (32 - hash_bits)];
-			uint16 hash_cur = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+			uint16 hash_cur = hash4(rh) >> 16;
 			if (hist_end < rh_end && hist_end >= BLOCK_SIZE && cache_end == hash_cur) {
 				uint32 sp = hist_end - BLOCK_SIZE;
 				uint32 mp = rh_end - BLOCK_SIZE;
@@ -2132,10 +2136,9 @@ struct RK256 : public MatchFinder_Base {
 				mp += pos_delta;
 
 				if (p > sp
-					&& p - sp < max_dist && !num_results) {
+					&& p - sp < max_dist) {
 					int len = try_match(buf, sp, mp, p_end);
-					if (len > best_len
-						&& num_results < MATCH_MAX_RESULT_ROWS) {
+					if (len > best_len) {
 						best_len = len;
 						match_results[num_results++] = len;
 						match_results[num_results++] = sp;
@@ -2153,9 +2156,13 @@ struct RK256 : public MatchFinder_Base {
 			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
 			++rh_end;
 
+			if (num_results) {
+				continue;
+			}
+
 			uint16& cache_end = cache[rh >> (32 - hash_bits)];
 			uint32& hist_end = table[rh >> (32 - hash_bits)];
-			uint16 hash_cur = hash4(value32(buf + rh_end - BLOCK_SIZE)) >> 16;
+			uint16 hash_cur = hash4(rh) >> 16;
 			if (hist_end < rh_end && hist_end >= BLOCK_SIZE && cache_end == hash_cur) {
 				uint32 sp = hist_end - BLOCK_SIZE;
 				uint32 mp = rh_end - BLOCK_SIZE;
@@ -2168,10 +2175,9 @@ struct RK256 : public MatchFinder_Base {
 				mp += pos_delta;
 
 				if (p > sp
-					&& p - sp < max_dist && !num_results) {
+					&& p - sp < max_dist) {
 					int len = try_match(buf, sp, mp, p_end);
-					if (len > best_len
-						&& num_results < MATCH_MAX_RESULT_ROWS) {
+					if (len > best_len) {
 						best_len = len;
 						match_results[num_results++] = len;
 						match_results[num_results++] = sp;
