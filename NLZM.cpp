@@ -2001,7 +2001,6 @@ struct BT4 : public MatchFinder_Base {
 };
 
 struct RK256 : public MatchFinder_Base {
-	const static int RK_MIN_LENGTH = 64;
 	const static int BLOCK_BITS = 8;
 	const static int BLOCK_SIZE = 1 << BLOCK_BITS;
 	const static int BLOCK_MASK = BLOCK_SIZE - 1;
@@ -2011,8 +2010,8 @@ struct RK256 : public MatchFinder_Base {
 	//uint32 remh = 1; for (int i = 0; i < BLOCK_SIZE; i++) { remh *= addh; }
 	const static uint32 REMH = 0x0E4EA401u;
 
-	INLINE uint32 rolling_hash_add(uint32 p, int y) { return y + p * ADDH; }
-	INLINE uint32 rolling_hash_add_remove(uint32 p, int yr, int yl) { return yr + p * ADDH - yl * REMH; }
+	INLINE uint32 rolling_hash_add(uint32 p, int y) { return (y + p) * ADDH; }
+	INLINE uint32 rolling_hash_add_remove(uint32 p, int yr, int yl) { return (yr + p - yl * REMH) * ADDH; }
 
 	uint32 hash_bits, window_size;
 	uint16* cache;
@@ -2028,7 +2027,7 @@ struct RK256 : public MatchFinder_Base {
 
 	RK256() : RK256(0, 0) {}
 
-	uint32 MinLength() const override { return RK_MIN_LENGTH; }
+	uint32 MinLength() const override { return BLOCK_SIZE; }
 
 	void Init() {
 		cache = new uint16[1 << hash_bits];
@@ -2065,7 +2064,7 @@ struct RK256 : public MatchFinder_Base {
 		}
 	}
 
-	void Update(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) override {
+	void update_incomplete_block(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) {
 		while (rh_end < BLOCK_SIZE && rh_end < p_end) {
 			rh = rolling_hash_add(rh, buf[rh_end]);
 			++rh_end;
@@ -2075,18 +2074,11 @@ struct RK256 : public MatchFinder_Base {
 				table[rh >> (32 - hash_bits)] = rh_end;
 			}
 		}
+	}
 
-		while (p >= rh_end && rh_end < p_end) {
-			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
-			++rh_end;
-
-			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
-				table[rh >> (32 - hash_bits)] = rh_end;
-			}
-		}
-
-		while (rh_end >= BLOCK_SIZE && rh_end - p < BLOCK_SIZE && rh_end < p_end) {
+	void update_running_block(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) {
+		while ((p >= rh_end && rh_end < p_end) ||
+			(rh_end >= BLOCK_SIZE && rh_end - p < BLOCK_SIZE && rh_end < p_end)) {
 			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
 			++rh_end;
 
@@ -2097,29 +2089,21 @@ struct RK256 : public MatchFinder_Base {
 		}
 	}
 
+	void Update(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) override {
+		update_incomplete_block(buf, p, p_end, max_dist);
+		update_running_block(buf, p, p_end, max_dist);
+	}
+
 	uint32* FindAndUpdate(const byte* buf, uint32 p, uint32 p_end, uint32 max_dist) override {
+		int num_results = 0;
 		match_results[0] = -1;
 
-		uint best_len = MinLength() - 1;
-		int num_results = 0;
+		update_incomplete_block(buf, p, p_end, max_dist);
 
-		while (rh_end < BLOCK_SIZE && rh_end < p_end) {
-			rh = rolling_hash_add(rh, buf[rh_end]);
-			++rh_end;
-
-			if (!(rh_end & BLOCK_MASK)) {
-				cache[rh >> (32 - hash_bits)] = hash4(rh) >> 16;
-				table[rh >> (32 - hash_bits)] = rh_end;
-			}
-		}
-
-		while (p >= rh_end && rh_end < p_end) {
+		while ((p >= rh_end && rh_end < p_end) ||
+			(rh_end >= BLOCK_SIZE && rh_end - p < BLOCK_SIZE && rh_end < p_end)) {
 			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
 			++rh_end;
-
-			if (num_results) {
-				continue;
-			}
 
 			uint16& cache_end = cache[rh >> (32 - hash_bits)];
 			uint32& hist_end = table[rh >> (32 - hash_bits)];
@@ -2138,8 +2122,7 @@ struct RK256 : public MatchFinder_Base {
 				if (p > sp
 					&& p - sp < max_dist) {
 					int len = try_match(buf, sp, mp, p_end);
-					if (len > best_len) {
-						best_len = len;
+					if (len) {
 						match_results[num_results++] = len;
 						match_results[num_results++] = sp;
 					}
@@ -2150,47 +2133,13 @@ struct RK256 : public MatchFinder_Base {
 				cache_end = hash_cur;
 				hist_end = rh_end;
 			}
-		}
-
-		while (rh_end >= BLOCK_SIZE && rh_end - p < BLOCK_SIZE && rh_end < p_end) {
-			rh = rolling_hash_add_remove(rh, buf[rh_end], buf[rh_end - BLOCK_SIZE]);
-			++rh_end;
 
 			if (num_results) {
-				continue;
-			}
-
-			uint16& cache_end = cache[rh >> (32 - hash_bits)];
-			uint32& hist_end = table[rh >> (32 - hash_bits)];
-			uint16 hash_cur = hash4(rh) >> 16;
-			if (hist_end < rh_end && hist_end >= BLOCK_SIZE && cache_end == hash_cur) {
-				uint32 sp = hist_end - BLOCK_SIZE;
-				uint32 mp = rh_end - BLOCK_SIZE;
-
-				ASSERT(p >= mp);
-				ASSERT(p > sp);
-
-				uint32 pos_delta = p - mp;
-				sp += pos_delta;
-				mp += pos_delta;
-
-				if (p > sp
-					&& p - sp < max_dist) {
-					int len = try_match(buf, sp, mp, p_end);
-					if (len > best_len) {
-						best_len = len;
-						match_results[num_results++] = len;
-						match_results[num_results++] = sp;
-					}
-				}
-			}
-
-			if (!(rh_end & BLOCK_MASK)) {
-				cache_end = hash_cur;
-				hist_end = rh_end;
+				break;
 			}
 		}
 
+		update_running_block(buf, p, p_end, max_dist);
 		match_results[num_results] = -1;
 		return match_results;
 	}
