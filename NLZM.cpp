@@ -336,10 +336,9 @@ struct BitDecoder {
 		rptr_bitcode = buf + HEADER_SIZE;
 		rptr_probcode = buf + HEADER_SIZE + bitcode_total_bytes_written;
 
-		while (bit_stream_bits < 24) {
-			bit_stream = (bit_stream << 8) + *rptr_bitcode++;
-			bit_stream_bits += 8;
-		}
+		bit_stream = *reinterpret_cast<uint32*>(rptr_bitcode);
+		rptr_bitcode += (31 - bit_stream_bits) >> 3;
+		bit_stream_bits |= 24;
 
 		rs[0] = RANS::rans_dec_init(&rptr_probcode);
 		rs[1] = RANS::rans_dec_init(&rptr_probcode);
@@ -395,20 +394,14 @@ struct BitDecoder {
 		}
 
 		ASSERT_DEBUG(num_bits <= bit_stream_bits);
-		uint32 v = bit_stream >> (bit_stream_bits - num_bits);
+		uint32 v = bit_stream & bit_code_mask[num_bits];
 
 		bit_stream_bits -= num_bits;
-		bit_stream &= bit_code_mask[bit_stream_bits];
+		bit_stream >>= num_bits;
 
-		int num_refill = (31 - bit_stream_bits) >> 3;
-		int num_refill_bits = num_refill << 3;
-
-		uint32 c24 = *reinterpret_cast<uint32*>(rptr_bitcode);
-		c24 = ((c24 & 0xFF0000) >> 16) | (c24 & 0xFF00) | ((c24 & 0xFF) << 16);
-		bit_stream = bit_stream << num_refill_bits;
-		bit_stream |= c24 >> (24 - num_refill_bits);
-		bit_stream_bits |= num_refill_bits;
-		rptr_bitcode += num_refill;
+		bit_stream |= *reinterpret_cast<uint32*>(rptr_bitcode) << bit_stream_bits;
+		rptr_bitcode += (31 - bit_stream_bits) >> 3;
+		bit_stream_bits |= 24;
 
 		bitcode_total_bits_encoded -= num_bits;
 
@@ -464,17 +457,36 @@ struct BitCoder {
 
 	void WriteBlock() {
 		while (bit_stream_bits > 0) {
-			*wptr_bitcode++ = byte(bit_stream >> 24);
-			bit_stream <<= 8;
+			*wptr_bitcode++ = byte(bit_stream);
+			bit_stream >>= 8;
 			bit_stream_bits -= 8;
 			++bitcode_total_bytes_written;
 		}
 
 		byte* wptr_probcode = buf + BitDecoder::BLOCK_MAX_SIZE - 1;
 		RANS::rans_t rs[4] = { RANS::MID, RANS::MID, RANS::MID, RANS::MID };
-		for (int i = rans_num_buffered - 1; i >= 0; i--) {
-			rs[i & 3] = RANS::rans_enc_put(rs[i & 3], &wptr_probcode, rans_buffer[i] & 0xFFFF, rans_buffer[i] >> 16);
-			ASSERT(wptr_probcode > wptr_bitcode);
+		if (rans_num_buffered) {
+			uint32 i = rans_num_buffered - 1;
+			while ((i & 3) && i + 1 > 0) {
+				rs[i & 3] = RANS::rans_enc_put(rs[i & 3], &wptr_probcode, rans_buffer[i] & 0xFFFF, rans_buffer[i] >> 16);
+				ASSERT(wptr_probcode > wptr_bitcode);
+				i--;
+			}
+
+			while (i >= 4) {
+				rs[0] = RANS::rans_enc_put(rs[0], &wptr_probcode, rans_buffer[i] & 0xFFFF, rans_buffer[i] >> 16);
+				rs[3] = RANS::rans_enc_put(rs[3], &wptr_probcode, rans_buffer[i - 1] & 0xFFFF, rans_buffer[i - 1] >> 16);
+				rs[2] = RANS::rans_enc_put(rs[2], &wptr_probcode, rans_buffer[i - 2] & 0xFFFF, rans_buffer[i - 2] >> 16);
+				rs[1] = RANS::rans_enc_put(rs[1], &wptr_probcode, rans_buffer[i - 3] & 0xFFFF, rans_buffer[i - 3] >> 16);
+				ASSERT(wptr_probcode > wptr_bitcode);
+				i -= 4;
+			}
+
+			while (i + 1 > 0) {
+				rs[i & 3] = RANS::rans_enc_put(rs[i & 3], &wptr_probcode, rans_buffer[i] & 0xFFFF, rans_buffer[i] >> 16);
+				ASSERT(wptr_probcode > wptr_bitcode);
+				i--;
+			}
 		}
 
 		RANS::rans_enc_flush(rs[3], &wptr_probcode);
@@ -541,16 +553,13 @@ struct BitCoder {
 		ASSERT(num_bits <= 24);
 		ASSERT(bit_stream_bits + num_bits <= 32);
 
-		int lsh = 32 - bit_stream_bits - num_bits;
-		ASSERT_DEBUG(lsh >= 0);
-
-		bit_stream += v << lsh;
+		bit_stream |= v << bit_stream_bits;
 		bit_stream_bits += num_bits;
 		bitcode_total_bits_encoded += num_bits;
 
 		while (bit_stream_bits & ~7) {
-			*wptr_bitcode++ = byte(bit_stream >> 24);
-			bit_stream <<= 8;
+			*wptr_bitcode++ = byte(bit_stream);
+			bit_stream >>= 8;
 			bit_stream_bits -= 8;
 			++bitcode_total_bytes_written;
 		}
