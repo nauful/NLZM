@@ -10,7 +10,6 @@
 #endif
 
 #include <ctime>
-#include <intrin.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,6 +18,12 @@
 #	ifdef _MSC_VER
 #		define MSVC
 #	endif
+#endif
+
+#ifdef _MSC_VER
+#	include <intrin.h>
+#else
+#	define _ftelli64 ftello64
 #endif
 
 #ifdef MSVC
@@ -246,13 +251,6 @@ namespace RANS {
 			for (int x = num_syms; x < dim_out; x++) {
 				mixin[y][x] = scale_max;
 			}
-		}
-	}
-
-	template<int num_syms, int scale_max>
-	void init_cdf(int16(&cdf)[num_syms]) {
-		for (int i = 0; i <= num_syms; i++) {
-			cdf[i] = (i << scale_bits) / num_syms;
 		}
 	}
 
@@ -3315,7 +3313,7 @@ uint32 crc32_calc(const byte* window, int64 n, uint64 crci) {
 	uint64 crc = crci ^ 0xFFFFFFFF;
 	const byte* next = window;
 
-	while (n && (byte(next) & 15)) {
+	while (n && (byte(size_t(next)) & 15)) {
 		crc = crc32_table[0][(crc ^ (*next++)) & 0xFF] ^ (crc >> 8);
 		--n;
 	}
@@ -3692,7 +3690,7 @@ int main(int argc, char** argv) {
 			"\t-window:bits = Window size in bits, default 20 (1 MB), min 16, max 30 (64 KB to 1 GB)\n"
 			"\t-posbits:bits = Position alignment bits, default 0, max 4\n"
 			"\t-ctx1:bits = Bits used for o1 prediction, default 2, max 8\n"
-			"\t\tposbits + ctx1 limited to 8"
+			"\t\tposbits + ctx1 limited to 8\n"
 		);
 	}
 
