@@ -2636,7 +2636,7 @@ void opt_parse_path_matches_into_rep4(const byte* window, ParsePath* path, const
 		if (cn->cmd == CMD_REP4) {
 			uint32 dist = forward_rep.entry[cn->rep_index];
 			ASSERT(op - cn->dict_match_pos == dist);
-			ASSERT(dist < op);
+			ASSERT(dist <= op);
 
 			forward_rep.Add(dist);
 			op += cn->match_len;
