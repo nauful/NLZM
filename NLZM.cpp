@@ -787,7 +787,7 @@ struct MatchFinderBT {
 
 struct MatchFinderRK256 {
 	const static uint32 BLOCK_BITS = 8;
-	const static uint32 BLOCK_SIZE = 132 << BLOCK_BITS;
+	const static uint32 BLOCK_SIZE = 1 << BLOCK_BITS;
 	const static uint32 BLOCK_MASK = BLOCK_SIZE - 1;
 
 	const static uint32 ADDH = 0x2F0FD693u;
