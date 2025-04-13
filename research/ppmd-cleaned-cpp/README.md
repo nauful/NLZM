@@ -12,6 +12,8 @@ Allocator:
 - Text area shrinking moves to unit allocation time.
 - Simplified text area expansion.
 
+
+
 - Cleaned up and simplified model handling.
 - Moved encoding and decoding methods to PPMD::EncodeFile and PPMD::DecodeFile.
 - Moved global states into classes.
